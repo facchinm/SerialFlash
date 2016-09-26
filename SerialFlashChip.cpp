@@ -333,10 +333,9 @@ bool SerialFlashChip::ready()
 //#define FLAG_DIFF_SUSPEND	0x04	// uses 2 different suspend commands
 //#define FLAG_256K_BLOCKS	0x10	// has 256K erase blocks
 
-bool SerialFlashChip::begin(SPIClass& device, uint8_t pin)
+SerialFlashChip::SerialFlashChip(SPIClass& device)
 {
 	SPIPORT = device;
-	return begin(pin);
 }
 
 bool SerialFlashChip::begin(uint8_t pin)

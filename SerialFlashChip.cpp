@@ -32,15 +32,6 @@
 #define CSRELEASE() DIRECT_WRITE_HIGH(cspin_basereg, cspin_bitmask)
 #define SPICONFIG   SPISettings(50000000, MSBFIRST, SPI_MODE0)
 
-uint16_t SerialFlashChip::dirindex = 0;
-uint8_t SerialFlashChip::flags = 0;
-uint8_t SerialFlashChip::busy = 0;
-
-static volatile IO_REG_TYPE *cspin_basereg;
-static IO_REG_TYPE cspin_bitmask;
-
-static SPIClass& SPIPORT = SPI;
-
 #define FLAG_32BIT_ADDR		0x01	// larger than 16 MByte address
 #define FLAG_STATUS_CMD70	0x02	// requires special busy flag check
 #define FLAG_DIFF_SUSPEND	0x04	// uses 2 different suspend commands
@@ -344,7 +335,6 @@ bool SerialFlashChip::begin(uint8_t pin)
 {
 	uint8_t id[5];
 	uint8_t f;
-	uint32_t size;
 
 	cspin_basereg = PIN_TO_BASEREG(pin);
 	cspin_bitmask = PIN_TO_BITMASK(pin);
@@ -356,8 +346,8 @@ bool SerialFlashChip::begin(uint8_t pin)
 		return false;
 	}
 	f = 0;
-	size = capacity(id);
-	if (size > 16777216) {
+	_size = capacity(id);
+	if (_size > 16777216) {
 		// more than 16 Mbyte requires 32 bit addresses
 		f |= FLAG_32BIT_ADDR;
 		SPIPORT.beginTransaction(SPICONFIG);
@@ -470,7 +460,7 @@ uint32_t SerialFlashChip::capacity(const uint8_t *id)
 	return n;
 }
 
-uint32_t SerialFlashChip::blockSize()
+uint32_t SerialFlashChip::blockSize() const
 {
 	// Spansion chips >= 512 mbit use 256K sectors
 	if (flags & FLAG_256K_BLOCKS) return 262144;

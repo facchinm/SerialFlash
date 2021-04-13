@@ -29,104 +29,90 @@
 #define SerialFlash_h_
 
 #include <Arduino.h>
+#include <api/BlockDevice.h>
 #include <SPI.h>
+#include "util/SerialFlash_directwrite.h"
 
-class SerialFlashFile;
-
-class SerialFlashChip
+class SerialFlashChip : public arduino::BlockDevice
 {
 public:
-	static bool begin(SPIClass& device, uint8_t pin = 6);
-	static bool begin(uint8_t pin = 6);
-	static uint32_t capacity(const uint8_t *id);
-	static uint32_t blockSize();
-	static void sleep();
-	static void wakeup();
-	static void readID(uint8_t *buf);
-	static void readSerialNumber(uint8_t *buf);
-	static void read(uint32_t addr, void *buf, uint32_t len);
-	static bool ready();
-	static void wait();
-	static void write(uint32_t addr, const void *buf, uint32_t len);
-	static void eraseAll();
-	static void eraseBlock(uint32_t addr);
+	SerialFlashChip(SPIClass& device = SPI, uint8_t pin = 6) : SPIPORT(device), pin(pin) {}
+	bool begin(SPIClass& device, uint8_t pin = 6);
+	bool begin(uint8_t pin = 6);
+	uint32_t capacity(const uint8_t *id);
+	uint32_t blockSize() const;
+	void sleep();
+	void wakeup();
+	void readID(uint8_t *buf);
+	void readSerialNumber(uint8_t *buf);
+	void read(uint32_t addr, void *buf, uint32_t len);
+	bool ready();
+	void wait();
+	void write(uint32_t addr, const void *buf, uint32_t len);
+	void eraseAll();
+	void eraseBlock(uint32_t addr);
 
-	static SerialFlashFile open(const char *filename);
-	static bool create(const char *filename, uint32_t length, uint32_t align = 0);
-	static bool createErasable(const char *filename, uint32_t length) {
-		return create(filename, length, blockSize());
+	virtual int init() {
+		return (begin(pin) != true);
 	}
-	static bool exists(const char *filename);
-	static bool remove(const char *filename);
-	static bool remove(SerialFlashFile &file);
-	static void opendir() { dirindex = 0; }
-	static bool readdir(char *filename, uint32_t strsize, uint32_t &filesize);
+    virtual int deinit() {
+    	return 0;
+    }
+
+    virtual int read(void *buffer, bd_addr_t addr, bd_size_t size) {
+    	read(addr, buffer, size);
+    	return size;
+    }
+
+    virtual int program(const void *buffer, bd_addr_t addr, bd_size_t size) {
+    	write(addr, buffer, size);
+    	return size;
+    }
+
+    virtual int erase(bd_addr_t addr, bd_size_t size)
+    {
+        for (uint32_t i = 0; i < size / blockSize(); i++) {
+        	eraseBlock(addr + i * blockSize());
+        }
+        return 0;
+    }
+
+    virtual int trim(bd_addr_t addr, bd_size_t size)
+    {
+        return 0;
+    }
+
+    virtual bd_size_t get_read_size() const {
+    	return blockSize();
+    }
+
+    virtual bd_size_t get_program_size() const {
+    	return blockSize();
+    }
+
+    virtual bd_size_t size() const {
+		return _size;
+    };
+
+    virtual const char *get_type() const {
+    	return "SerialFlashChip";
+    };
+
 private:
-	static uint16_t dirindex; // current position for readdir()
-	static uint8_t flags;	// chip features
-	static uint8_t busy;	// 0 = ready
+	uint16_t dirindex = 0; // current position for readdir()
+	uint8_t flags = 0;	// chip features
+	uint8_t busy = 0;	// 0 = ready
 				// 1 = suspendable program operation
 				// 2 = suspendable erase operation
 				// 3 = busy for realz!!
+	uint32_t _size;
+	SPIClass& SPIPORT;
+	volatile IO_REG_TYPE *cspin_basereg;
+	IO_REG_TYPE cspin_bitmask;
+	uint8_t pin;
 };
 
 extern SerialFlashChip SerialFlash;
-
-
-class SerialFlashFile
-{
-public:
-	constexpr SerialFlashFile() { }
-	operator bool() {
-		if (address > 0) return true;
-		return false;
-	}
-	uint32_t read(void *buf, uint32_t rdlen) {
-		if (offset + rdlen > length) {
-			if (offset >= length) return 0;
-			rdlen = length - offset;
-		}
-		SerialFlash.read(address + offset, buf, rdlen);
-		offset += rdlen;
-		return rdlen;
-	}
-	uint32_t write(const void *buf, uint32_t wrlen) {
-		if (offset + wrlen > length) {
-			if (offset >= length) return 0;
-			wrlen = length - offset;
-		}
-		SerialFlash.write(address + offset, buf, wrlen);
-		offset += wrlen;
-		return wrlen;
-	}
-	void seek(uint32_t n) {
-		offset = n;
-	}
-	uint32_t position() {
-		return offset;
-	}
-	uint32_t size() {
-		return length;
-	}
-	uint32_t available() {
-		if (offset >= length) return 0;
-		return length - offset;
-	}
-	void erase();
-	void flush() {
-	}
-	void close() {
-	}
-	uint32_t getFlashAddress() {
-		return address;
-	}
-protected:
-	friend class SerialFlashChip;
-	uint32_t address = 0;  // where this file's data begins in the Flash, or zero
-	uint32_t length = 0;   // total length of the data in the Flash chip
-	uint32_t offset = 0; // current read/write offset in the file
-	uint16_t dirindex = 0;
-};
 
 
 #endif
